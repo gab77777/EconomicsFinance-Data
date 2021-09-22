@@ -1,0 +1,185 @@
+---
+title: "R Notebook"
+output: html_document
+---
+
+```{r}
+
+library(reshape2)
+library(tidyverse)
+library(wbstats)
+library(data.table)
+library(ggthemes)
+library(plotly)
+library(psych)
+library(highcharter)
+library(quantmod)
+library(TTR)
+library(dplyr)
+library(tidyr)
+library(viridisLite)
+library(viridis)
+
+```
+
+<!-- Economics Charts -->
+<!-- Data -->
+```{r}
+
+population <- wb('SP.POP.TOTL', country = 'countries_only') %>%
+  mutate(date = as.numeric(date), value = round(value / 1000000, 2), indicator = 'Population') %>%
+  select(-indicatorID)
+
+gdp <- wb('NY.GDP.PCAP.CD', country = 'countries_only') %>%
+  mutate(date = as.numeric(date), value = round(value, 2), indicator = 'GDP per Capita') %>%
+  select(-indicatorID)
+
+lifeexpectancy <- wb('SP.DYN.LE00.IN', country = 'countries_only') %>%
+  mutate(date = as.numeric(date), value = round(value, 2), indicator = 'Life Expectancy') %>%
+  select(-indicatorID)
+
+#This one is tricky. Run once with df <-...then remove and keep it like this.
+
+bind_rows(gdp, lifeexpectancy, population) %>% tidyr::pivot_wider(names_from = 'indicator', values_from = 'value') %>%
+  na.omit()
+```
+
+<!-- Line chat - GDP time series -->
+```{r}
+
+line_data <- gdp %>% filter(iso3c == 'ITA')
+line_data2 <- gdp %>% filter(iso3c == 'PER')
+
+ggplot() +
+  geom_line(data = line_data,
+                aes(x = date,
+                y = value),
+              color = 'darkblue',
+              size = 1) +
+  
+   # geom_line(data = line_data2,
+   #              aes(x = date,
+   #              y = value),
+   #            color = 'darkred',
+   #            size = 1) +
+
+  labs(title = 'GDP per Capita (Current USD)',
+       x = 'Year',
+       y = 'Current USD',
+       subtitle = paste('From ', min(line_data$date), ' to ', max(line_data$date), sep = '')) +
+  ggthemes::theme_economist_white()
+
+```
+
+<!-- Histogram -->
+```{r}
+
+plot <- ggplot() +
+  geom_histogram(data = lifeexpectancy,
+                 aes(x = value),
+                 bins = 25,
+                 color = '#1a214f',
+                 fill = '#4173b5') +
+  labs(title = 'Global distribution of life expectancy at birth',
+      x = 'Life Expectancy (Age)',
+      y = 'Frequency')
+
+plot
+
+#psych:::describe(lifeexpectancy$value)
+
+```
+
+<!-- Scatter plot with interactive and animated features -->
+```{r}
+
+ggplot(data = df %>% filter(date == 2019)) +
+  geom_point(aes(x = `GDP per Capita`,
+                 y = `Life Expectancy`,
+                 color = Population,
+                 size = Population)) +
+  labs(title = 'Relationship between life GDP per Capita and Life Expectancy') +
+  viridis::scale_color_viridis()
+
+
+p <- ggplot(data = df) +
+  geom_point(aes(x = `GDP per Capita`,
+                 y = `Life Expectancy`,
+                 color = Population,
+                 frame = date,
+                 text = paste('Country: ', country, '<br>',
+                              'GDP per capita: ', `GDP per Capita`, '<br>',
+                              'Life expectancy: ', `Life Expectancy`, '<br>',
+                              'Population ', Population, 'MM', sep=''),
+                 size = Population)) +
+  labs(title = 'Relationship between life GDP per Capita and Life Expectancy') +
+  viridis::scale_color_viridis() +
+  theme(text = element_text(family = 'Arial'))
+
+plotly::ggplotly(p, tooltip = 'text')
+
+```
+
+<!-- Geographic charts -- plotly -->
+```{r}
+
+border <- list(color = toRGB('grey'), width = 0.5)
+  
+maptype <- list(
+  showframe = FALSE,
+  showcoastline = TRUE,
+  projection = list(type = 'Mercator')
+)
+
+#Chloroplet
+p <- plot_geo(data = lifeexpectancy %>% filter(date == 2019)) %>% 
+  add_trace(z = ~value,
+            color = ~value,
+            colors = 'Blues',
+            text = ~country,
+            locations = ~iso3c,
+            marker = list(line = border)) %>% 
+  colorbar(title = 'Life expectancy') %>% 
+  layout(title = 'Global life expectancy in 2019',
+         geo = maptype)
+
+```
+
+<!-- Financial Charts - OHLC -->
+
+```{r}
+
+quantmod::getSymbols('KO')
+p <- highcharter::hchart(KO)
+
+p2 <- highchart(type = 'stock') %>%
+  hc_yAxis_multiples(create_yaxis(3, height = c(2, 1, 1), turnopposite = TRUE)) %>% 
+  hc_add_series(KO, name = 'KO') %>%
+  hc_add_series(KO$KO.Volume, name = 'Volume', yAxis = 1, color = '#d9b34c', type = 'column') %>%
+  hc_add_series(TTR::RSI(Cl(KO)), name = 'RSI', yAxis = 2, color = '#000000') %>%
+  hc_add_series(xts(rep(30, nrow(KO)), index(KO)), name = 'Oversold', yAxis = 2, color = 'green') %>%
+  hc_add_series(xts(rep(70, nrow(KO)), index(KO)), name = 'Overbought', yAxis = 2, color = 'red')
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
